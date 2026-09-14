@@ -4,50 +4,61 @@ import telebot as tb
 import webbrowser
 from telebot import types
 from urllib3.util import url
+import sqlite3
 
 bot = tb.TeleBot('8691018290:AAH0uPcbx2r3YaNDKfz_RM0eXoEkDa_6mes')
+name = None
+
 
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    btn1 = types.KeyboardButton('On site')
-    btn2 = types.KeyboardButton('Delete photo')
-    btn3 = types.KeyboardButton('Change text')
-    markup.row(btn1)
-    markup.row(btn2, btn3)
-    file = open('photo.jpeg', 'rb')
-    bot.send_photo(message.chat.id, file, reply_markup=markup)
-    # bot.send_message(message.chat.id, 'Hello', reply_markup=markup)
-    bot.register_next_step_handler(message, on_click)
+    print(message.chat.id)
+    conn = sqlite3.connect('DB.sql')
+    cur = conn.cursor()
 
+    cur.execute('CREATE TABLE IF NOT EXISTS users (id int auto_increment primary key, name varchar(50), pass varchar(50))')
+    conn.commit()
+    cur.close()
+    conn.close()
 
-def on_click(message):
-    if message.text == 'On site':
-        bot.send_message(message.chat.id, 'website is open')
-    elif message.text == 'Delete photo':
-        bot.send_message(message.chat.id, 'delete')
-    elif message.text == 'Change text':
-        bot.send_message(message.chat.id, 'change text')
+    bot.send_message(message.chat.id, "Привет, сейчас тебя зарегаем братк!")
+    bot.register_next_step_handler(message, user_name)
 
-@bot.message_handler(content_types=['photo', 'sticker'])
-def get_photo(message):
-    markup = types.InlineKeyboardMarkup()
-    btn1 = types.InlineKeyboardButton('Perejti na sajt', url='https://google.com')
-    btn2 = types.InlineKeyboardButton('Delete photo', callback_data='delete')
-    btn3 = types.InlineKeyboardButton('Change text', callback_data='edit')
-    markup.row(btn1)
-    markup.row(btn2, btn3)
-    bot.reply_to(message, 'What a beautiful photo!', reply_markup=markup)
+def user_name(message):
+    global name
+    name = message.text.strip()
+    bot.send_message(message.chat.id, 'Введите пароль')
+    bot.register_next_step_handler(message, user_pass)
+
+def user_pass(message):
+    password = message.text.strip()
+    conn = sqlite3.connect('DB.sql')
+    cur = conn.cursor()
+
+    cur.execute(f'INSERT INTO users (name, pass) VALUES ("{name}", "{password}")')
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    markup = tb.types.InlineKeyboardMarkup()
+    markup.add(tb.types.InlineKeyboardButton('Список пз', callback_data='users'))
+    bot.send_message(message.chat.id, 'Uspeshno!!!', reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: True)
-def callback_message(callback):
-    if callback.data == 'delete':
-        bot.delete_message(callback.message.chat.id, callback.message.message_id - 1)
-    elif callback.data == 'edit':
-        bot.edit_message_text('Edit text:', callback.message.chat.id, callback.message.message_id)
+def callback(call):
+    conn = sqlite3.connect('DB.sql')
+    cur = conn.cursor()
 
+    cur.execute('SELECT * FROM users')
+    users = cur.fetchall()
 
+    info = ''
+    for el in users:
+        info += f'Name: {el[1]}, password: {el[2]}\n'
+    cur.close()
+    conn.close()
+    bot.send_message(call.message.chat.id, info)
 
 
 bot.infinity_polling()
